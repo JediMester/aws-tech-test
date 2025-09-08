@@ -1,0 +1,72 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: EC2 Instance with NGINX install
+
+
+Parameters:
+  LatestAmiId:
+    Type: 'AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>'
+    Default: /aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2
+
+  KeyName:
+    Type: AWS::EC2::KeyPair::KeyName
+    Default: ""
+    Description: Optional. EC2 KeyPair name for SSH. Leave empty to disable SSH.
+
+  SSHCidr:
+    Type: String
+    Default: 0.0.0.0/0
+    Description: CIDR allowed for SSH (used only if KeyName provided). Prefer YOUR_IP/32.
+
+Conditions:
+  HasKey: !Not [ !Equals [ !Ref KeyName, "" ] ]
+
+Resources:
+  WebSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Enable HTTP (and SSH as well if KeyName is provided)
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - !If
+          - HasKey
+          - { IpProtocol: tcp, FromPort: 22, ToPort: 22, CidrIp: !Ref SSHCidr }
+          - { Ref: AWS::NoValue }
+
+  WebInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: t2.micro
+      ImageId: !Ref LatestAmiId
+      SecurityGroupIds:
+        - !Ref WebSecurityGroup
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          set -euxo pipefail
+          yum update -y
+          amazon-linux-extras enable nginx1
+          yum -y clean metadata
+          yum -y install nginx
+          #amazon-linux-extras install nginx1.12 -y
+          systemctl start nginx
+          systemctl enable nginx
+          echo '<h1>CF-EC2-Web - NGINX OK</h1>' > /usr/share/nginx/html/index.html
+      Tags:
+        - Key: Name
+          Value: CF-EC2-Web
+
+Outputs:
+  InstanceId:
+    Description: EC2 Instance ID
+    Value: !Ref WebInstance
+
+  PublicIP:
+    Description: Public IP of the instance
+    Value: !GetAtt WebInstance.PublicIp
+
+  PublicDNS:
+    Description: Public DNS of the instance
+    Value: !GetAtt WebInstance.PublicDnsName

@@ -1,0 +1,76 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Root stack for EC2, Lambda(API GW), and ECS(Fargate+ALB) via nested stacks
+
+Parameters:
+  TemplatesBucket:
+    Type: String
+    Description: S3 bucket that hosts the nested CFN templates
+  TemplatesPrefix:
+    Type: String
+    Default: cloudformation/
+    Description: Key prefix within the bucket (must end with / if used)
+
+  # EC2 options
+  KeyName:
+    Type: String
+    Default: ""
+    Description: Optional EC2 KeyPair name for SSH (leave empty to disable SSH)
+  SSHCidr:
+    Type: String
+    Default: 0.0.0.0/0
+    Description: CIDR for SSH (used only if KeyName is provided)
+  LatestAmiId:
+    Type: 'AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>'
+    Default: /aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2
+
+  # ECS options
+  EnvironmentName:
+    Type: String
+    Default: techtest
+  ContainerImage:
+    Type: String
+    Default: nginxdemos/hello:latest
+  ContainerPort:
+    Type: Number
+    Default: 80
+  HealthCheckPath:
+    Type: String
+    Default: /
+  DesiredCount:
+    Type: Number
+    Default: 1
+  TaskCpu:
+    Type: String
+    Default: 256
+  TaskMemory:
+    Type: String
+    Default: 512
+
+Resources:
+  EC2Stack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub "https://${TemplatesBucket}.s3.${AWS::Region}.amazonaws.com/${TemplatesPrefix}ec2-stack.yml"
+      Parameters:
+        LatestAmiId: !Ref LatestAmiId
+        KeyName: !Ref KeyName
+        SSHCidr: !Ref SSHCidr
+
+  LambdaStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub "https://${TemplatesBucket}.s3.${AWS::Region}.amazonaws.com/${TemplatesPrefix}lambda-stack.yml"
+
+  ECSStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub "https://${TemplatesBucket}.s3.${AWS::Region}.amazonaws.com/${TemplatesPrefix}ecs-stack.yml"
+      Parameters:
+        EnvironmentName: !Ref EnvironmentName
+        ContainerImage: !Ref ContainerImage
+        ContainerPort: !Ref ContainerPort
+        HealthCheckPath: !Ref HealthCheckPath
+        DesiredCount: !Ref DesiredCount
+        TaskCpu: !Ref TaskCpu
+        TaskMemory: !Ref TaskMemory
+
