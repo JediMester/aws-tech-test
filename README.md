@@ -49,8 +49,10 @@ Directory tree:
 
 Recommended shell variables:
 
+```sh
 export AWS_PROFILE=default
 export AWS_REGION=eu-west-1
+```
 
 ### 1. EC2 stack (Nginx + optional SSH)
 
@@ -61,30 +63,37 @@ Key features:
 - Output: InstanceId, PublicIP, PublicDNS
 
 ### Deploy without SSH:
+```sh
 aws cloudformation deploy \
   --stack-name ec2-web-stack \
   --template-file cloudformation/ec2-stack.yml \
   --region $AWS_REGION --profile $AWS_PROFILE
+```
 
 ### Deploy with SSH (recommended /32):
 1. KeyPair creation in AWS (private key locally)
+```sh
 aws ec2 create-key-pair \
   --key-name aws_def_key \
   --query 'KeyMaterial' --output text \
   --region $AWS_REGION --profile $AWS_PROFILE > ~/.ssh/aws_def_key.pem
 chmod 400 ~/.ssh/aws_def_key.pem
+```
 
 2. Get own public IP
+```sh
 MYIP=$(curl -s https://checkip.amazonaws.com)
-
+```
 3. Deploy
+```sh
 aws cloudformation deploy \
   --stack-name ec2-web-stack \
   --template-file cloudformation/ec2-stack.yml \
   --parameter-overrides KeyName=aws_def_key SSHCidr=${MYIP}/32 \
   --region $AWS_REGION --profile $AWS_PROFILE
-
+```
 # Outputs and quick check:
+```sh
 aws cloudformation describe-stacks \
   --stack-name ec2-web-stack \
   --query "Stacks[0].Outputs" \
@@ -98,7 +107,7 @@ EC2_IP=$(aws cloudformation describe-stacks \
 curl "http://$EC2_IP/"
 # SSH (if there is KeyName):
 ssh -i ~/.ssh/aws_def_key.pem ec2-user@$EC2_IP
-
+```
 ## 2. Lambda + API Gateway stack
 
 # What it does:
