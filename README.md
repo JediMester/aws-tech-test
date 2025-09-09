@@ -227,7 +227,7 @@ aws elbv2 describe-target-health \
   --region $AWS_REGION --profile $AWS_PROFILE
 ```
 
-## Common pitfalls might be:
+### Common pitfalls might be:
 - Region mismatch (EC2 in a different region than Lambda/ECS/ALB)
 - Port mismatch (app 8080 <-> TargetGroup/ALB 80)
 - HealthCheckPath returns 404
@@ -258,106 +258,48 @@ make outputs-main
 The Makefile will:
 - create S3 bucket techtest-cfn-templates-<account>-<region>,
 - block public access, enable SSE-S3,
-- sync cloudformation/ → s3://<bucket>/cloudformation/,
+- sync cloudformation/ -> s3://<bucket>/cloudformation/,
 - deploy cloudformation/main.yml with parameters,
 - print useful outputs.
 
-# Custom S3 creation:
+### Deploy individual stacks (standalone)
 
-export AWS_PROFILE=default
-export AWS_REGION=eu-west-1
+Note: You can still deploy stacks separately (see commands inside the README sections if needed).
 
-Example - create-s3.sh:
+### Switch container image quickly
+```sh
+# Switch to hello nginx on port 80
+make set-image-hello
 
-ACCOUNT=$(aws sts get-caller-identity --query Account --output text --region $AWS_REGION --profile $AWS_PROFILE)
-BUCKET="techtest-cfn-templates-${ACCOUNT}-${AWS_REGION}"
-
-# us-east-1 is an exception: no LocationConstraint
-if [ "$AWS_REGION" = "us-east-1" ]; then
-  aws s3api create-bucket \
-    --bucket "$BUCKET" \
-    --region "$AWS_REGION" \
-    --profile "$AWS_PROFILE"
-else
-  aws s3api create-bucket \
-    --bucket "$BUCKET" \
-    --region "$AWS_REGION" \
-    --create-bucket-configuration LocationConstraint="$AWS_REGION" \
-    --profile "$AWS_PROFILE"
-fi
-
-
-# Secure, basic settings for the newly created S3:
-- Disable public access
-- Basic encryption (SSE-S3 / AES256)
-- Enable versioning (optional)
-
-aws s3api put-public-access-block \
-  --bucket "$BUCKET" \
-  --public-access-block-configuration BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true \
-  --region "$AWS_REGION" --profile "$AWS_PROFILE"
-
-aws s3api put-bucket-encryption \
-  --bucket "$BUCKET" \
-  --server-side-encryption-configuration '{"Rules":[{"ApplyServerSideEncryptionByDefault":{"SSEAlgorithm":"AES256"}}]}' \
-  --region "$AWS_REGION" --profile "$AWS_PROFILE"
-
-aws s3api put-bucket-versioning \
-  --bucket "$BUCKET" \
-  --versioning-configuration Status=Enabled \
-  --region "$AWS_REGION" --profile "$AWS_PROFILE"
-
-
-# Upload + deployment:
-
-aws s3 mb s3://<your-bucket> --region $AWS_REGION --profile $AWS_PROFILE
-aws s3 sync cloudformation/ s3://<your-bucket>/cloudformation/ --region $AWS_REGION --profile $AWS_PROFILE
-
-aws cloudformation deploy \
-  --stack-name main-stack \
-  --template-file cloudformation/main.yml \
-  --parameter-overrides TemplatesBucket=<your-bucket> \
-  --capabilities CAPABILITY_NAMED_IAM \
-  --region $AWS_REGION --profile $AWS_PROFILE
-
-## Cleanup:
-# Delete ECS / Lambda / EC2 stacks
-aws cloudformation delete-stack --stack-name main-stack --region "$AWS_REGION" --profile "$AWS_PROFILE"
-aws cloudformation wait stack-delete-complete --stack-name main-stack --region "$AWS_REGION" --profile "$AWS_PROFILE"
-
-# Delete all objects + versions
-aws s3api list-object-versions --bucket "$BUCKET" \
-  --region "$AWS_REGION" --profile "$AWS_PROFILE" \
-| jq -r '.Versions[]?, .DeleteMarkers[]? | [.Key, .VersionId] | @tsv' \
-| while IFS=$'\t' read -r key ver; do
-    aws s3api delete-object --bucket "$BUCKET" --key "$key" --version-id "$ver" \
-      --region "$AWS_REGION" --profile "$AWS_PROFILE";
-  done
-
-# Delete S3 Bucket 
-aws s3api delete-bucket --bucket "$BUCKET" --region "$AWS_REGION" --profile "$AWS_PROFILE"
-
+# Switch to Node app on port 8080 (public Docker Hub image)
+make set-image-node
+```
+### Cleanup (cost control)
+```sh
+# delete nested stacks, then (optionally) empty & delete the S3 bucket
+make nuke
+```
 
 ## Design Rationale
 
-# CloudFormation & modularity:
+### CloudFormation & modularity:
 - Modular templates (ec2-stack.yml, lambda-stack.yml, ecs-stack.yml) -> clear responsibilities:
     - easy to develop/debug separately
 - Root main.yml (nested stack) -> full deployment with a single command:
     - reusable in any region with S3 TemplateURL
-# EC2 (simple web + health target)
+### EC2 (simple web + health target)
 - AL2 AMI from SSM -> no region-dependent AMI hardcode, always up to date
 - UserData NGINX -> deterministic, fast “hello web” target for Lambda health check.
 - Optional SSH KeyName + SSHCidr -> no ssh by default, can be narrowed to /32 if needed:
     - infrastructure security baseline
-# Lambda + API Gateway
+### Lambda + API Gateway
 - REGIONAL API -> lower latency in the target region, simpler (no edge deploy)
 - Standard lib (urllib) -> no external dependency/layer:
     - fewer points of failure
     - faster cold start
 - Tag-based EC2 filtering (Name=CF-EC2-Web) -> finds our machine deterministically even with multiple instances
 - Environmental variables -> region/timeout configurable from CFN parameters
-# ECS Fargate + ALB
+### ECS Fargate + ALB
 - Fargate -> no EC2 capacity/patching issues:
     - pay-per-task
     - clean serverless ops
@@ -369,7 +311,7 @@ aws s3api delete-bucket --bucket "$BUCKET" --region "$AWS_REGION" --profile "$AW
 - Alternative for production: private subnets + NAT Gateway (more expensive, but more secure)
 - Parameterized ContainerImage, ContainerPort, HealthCheckPath -> you can run any public image (e.g., Node.js app on 8080)
 - CloudWatch Logs (/ecs/<env>-app) -> out-of-the-box task logs
-# Security & costs
+### Security & costs
 - S3 public access block + SSE-S3 -> templates are private and encrypted
 - IAM managed policies -> quick start
     - in prod, it is worth narrowing down to least privilege (custom policy)
@@ -379,11 +321,6 @@ aws s3api delete-bucket --bucket "$BUCKET" --region "$AWS_REGION" --profile "$AW
     - low CPU/Mem (256/512)
     - short log retention (7 days)
     - stack delete at the end
-- Prod alternatives: 
-    - ECS Service Auto Scaling
-    - spot Fargate (if available in the region)
-    - refined log retention
-- CloudWatch Logs (/ecs/<env>-app) -> out-of-the-box task logs
 
 
 ## Security notes
