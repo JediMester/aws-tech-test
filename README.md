@@ -325,5 +325,5 @@ make nuke
 
 ## Security notes
 - Only enable SSH - and only for /32 - if necessary.
-- ALB HTTP/80 public – TLS (ACM cert + HTTPS listener) recommended in production.
-- IAM roles have managed policies – they can be refined to minimum permissions.
+- ALB HTTP/80 public - TLS (ACM cert + HTTPS listener) recommended in production.
+- IAM roles have managed policies - they can be refined to minimum permissions.
