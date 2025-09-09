@@ -256,10 +256,10 @@ make deploy-all
 make outputs-main
 ```
 The Makefile will:
-- create S3 bucket techtest-cfn-templates-<account>-<region>,
-- block public access, enable SSE-S3,
-- sync cloudformation/ -> s3://<bucket>/cloudformation/,
-- deploy cloudformation/main.yml with parameters,
+- create S3 bucket `techtest-cfn-templates-<account>-<region>`
+- block public access, enable SSE-S3
+- sync `cloudformation/` -> `s3://<bucket>/cloudformation/`
+- deploy `cloudformation/main.yml` with parameters,
 - print useful outputs.
 
 ### Deploy individual stacks (standalone)
