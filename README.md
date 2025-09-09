@@ -13,7 +13,7 @@ This project deploys a small, modular AWS architecture using CloudFormation:
 The templates are parameterized, so they can be easily switched to another region/image/port.
 
 Directory tree:
-'''bash
+'''sh
 .
 ├─ cloudformation/
 │  ├─ ec2-stack.yml        # EC2 + SG + (optional SSH) + Outputs (PublicIP/DNS)
@@ -22,9 +22,11 @@ Directory tree:
 ├─ lambda/
 │  └─ get-ec2-status.py    # (reference) same logic inline in the CFN as well
 └─ ecs-app/                # (optional) source/Dockerfile of custom app if needed
+'''
 
 ### Architecture (ASCII)
 
+'''sh
 [Internet]
     |
     |           +------------------------+
@@ -36,6 +38,7 @@ Directory tree:
                 +----------------------+
                          |
                       VPC (2x public subnet, külön AZ)
+'''
 
 ### Prerequisites
 
