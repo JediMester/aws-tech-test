@@ -1,4 +1,4 @@
-### AWS Tech test - EC2 + ECS Fargate + ALB + Lambda/API Gateway (CloudFormation)
+# AWS Tech test - EC2 + ECS Fargate + ALB + Lambda/API Gateway (CloudFormation)
 
 ## Overview
 
@@ -13,6 +13,8 @@ This project deploys a small, modular AWS architecture using CloudFormation:
 The templates are parameterized, so they can be easily switched to another region/image/port.
 
 Directory tree:
+
+```sh
 .
 ├─ cloudformation/
 │  ├─ ec2-stack.yml        # EC2 + SG + (optional SSH) + Outputs (PublicIP/DNS)
@@ -21,9 +23,11 @@ Directory tree:
 ├─ lambda/
 │  └─ get-ec2-status.py    # (reference) same logic inline in the CFN as well
 └─ ecs-app/                # (optional) source/Dockerfile of custom app if needed
+```
 
-## Architecture (ASCII)
+### Architecture (ASCII)
 
+```sh
 [Internet]
     |
     |           +------------------------+
@@ -35,8 +39,9 @@ Directory tree:
                 +----------------------+
                          |
                       VPC (2x public subnet, külön AZ)
+```
 
-## Prerequisites
+### Prerequisites
 
 - AWS CLI v2, configured profile (--profile) and region (--region)
 - Own Docker Hub image for the container (optional)
@@ -44,10 +49,12 @@ Directory tree:
 
 Recommended shell variables:
 
+```sh
 export AWS_PROFILE=default
 export AWS_REGION=eu-west-1
+```
 
-## 1. EC2 stack (Nginx + optional SSH)
+### 1. EC2 stack (Nginx + optional SSH)
 
 Key features:
 - AL2 AMI from SSM's “latest” parameter (no hardcode)
@@ -55,31 +62,38 @@ Key features:
 - Optional SSH (22/tcp) – only opens if you provide a KeyName
 - Output: InstanceId, PublicIP, PublicDNS
 
-# Deploy without SSH:
+### Deploy without SSH:
+```sh
 aws cloudformation deploy \
   --stack-name ec2-web-stack \
   --template-file cloudformation/ec2-stack.yml \
   --region $AWS_REGION --profile $AWS_PROFILE
+```
 
-# Deploy with SSH (recommended /32):
+### Deploy with SSH (recommended /32):
 1. KeyPair creation in AWS (private key locally)
+```sh
 aws ec2 create-key-pair \
   --key-name aws_def_key \
   --query 'KeyMaterial' --output text \
   --region $AWS_REGION --profile $AWS_PROFILE > ~/.ssh/aws_def_key.pem
 chmod 400 ~/.ssh/aws_def_key.pem
+```
 
 2. Get own public IP
+```sh
 MYIP=$(curl -s https://checkip.amazonaws.com)
-
+```
 3. Deploy
+```sh
 aws cloudformation deploy \
   --stack-name ec2-web-stack \
   --template-file cloudformation/ec2-stack.yml \
   --parameter-overrides KeyName=aws_def_key SSHCidr=${MYIP}/32 \
   --region $AWS_REGION --profile $AWS_PROFILE
-
-# Outputs and quick check:
+```
+### Outputs and quick check:
+```sh
 aws cloudformation describe-stacks \
   --stack-name ec2-web-stack \
   --query "Stacks[0].Outputs" \
@@ -93,30 +107,35 @@ EC2_IP=$(aws cloudformation describe-stacks \
 curl "http://$EC2_IP/"
 # SSH (if there is KeyName):
 ssh -i ~/.ssh/aws_def_key.pem ec2-user@$EC2_IP
+```
+### 2. Lambda + API Gateway stack
 
-## 2. Lambda + API Gateway stack
-
-# What it does:
+### What it does:
 
 API: GET /status -> Lambda -> EC2 DescribeInstances (based on tag: Name=CF-EC2-Web) -> HTTP GET to EC2 IP -> JSON
 
-# Deployment:
+### Deployment:
+```sh
 aws cloudformation deploy \
   --stack-name lambda-stack \
   --template-file cloudformation/lambda-stack.yml \
   --capabilities CAPABILITY_NAMED_IAM \
   --region $AWS_REGION --profile $AWS_PROFILE
+```
 
-# API URL:
+### API URL:
+```sh
 aws cloudformation describe-stacks \
   --stack-name lambda-stack \
   --query "Stacks[0].Outputs[?OutputKey=='ApiUrl'].OutputValue" \
   --output text --region $AWS_REGION --profile $AWS_PROFILE
+```
 
 # Testing:
+```sh
 curl "https://<api-id>.execute-api.${AWS_REGION}.amazonaws.com/prod/status"
 # Expected output: {"ec2_ip":"<ip>","health":{"http_status":200,"ok":true}}
-
+```
 NOTE: the Lambda code uses the standard urllib.request lib, so there is no external dependency.
 
 
