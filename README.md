@@ -247,7 +247,7 @@ aws cloudformation wait stack-delete-complete --stack-name lambda-stack --region
 aws cloudformation wait stack-delete-complete --stack-name ec2-web-stack --region $AWS_REGION --profile $AWS_PROFILE
 ```
 
-## Makefile - Costumizable and configuralble, a One-Shot nested deploy (S3 create + sync + deploy --> optional - included in the main/root dir.)
+## Makefile - Customizable and configurable, a One-Shot nested deploy (S3 create + sync + deploy --> optional - included in the main/root dir.)
 ```sh
 # create secured S3 bucket, sync templates, deploy nested stacks
 make deploy-all
