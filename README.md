@@ -13,6 +13,7 @@ This project deploys a small, modular AWS architecture using CloudFormation:
 The templates are parameterized, so they can be easily switched to another region/image/port.
 
 Directory tree:
+'''bash
 .
 ├─ cloudformation/
 │  ├─ ec2-stack.yml        # EC2 + SG + (optional SSH) + Outputs (PublicIP/DNS)
