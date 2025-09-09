@@ -1,6 +1,6 @@
-### AWS Tech test - EC2 + ECS Fargate + ALB + Lambda/API Gateway (CloudFormation)
+## AWS Tech test - EC2 + ECS Fargate + ALB + Lambda/API Gateway (CloudFormation)
 
-## Overview
+### Overview
 
 This project deploys a small, modular AWS architecture using CloudFormation:
 - EC2 (Amazon Linux 2) – running NGINX (HTTP/80), optional SSH
@@ -22,7 +22,7 @@ Directory tree:
 │  └─ get-ec2-status.py    # (reference) same logic inline in the CFN as well
 └─ ecs-app/                # (optional) source/Dockerfile of custom app if needed
 
-## Architecture (ASCII)
+### Architecture (ASCII)
 
 [Internet]
     |
@@ -36,7 +36,7 @@ Directory tree:
                          |
                       VPC (2x public subnet, külön AZ)
 
-## Prerequisites
+### Prerequisites
 
 - AWS CLI v2, configured profile (--profile) and region (--region)
 - Own Docker Hub image for the container (optional)
@@ -47,7 +47,7 @@ Recommended shell variables:
 export AWS_PROFILE=default
 export AWS_REGION=eu-west-1
 
-## 1. EC2 stack (Nginx + optional SSH)
+### 1. EC2 stack (Nginx + optional SSH)
 
 Key features:
 - AL2 AMI from SSM's “latest” parameter (no hardcode)
@@ -55,13 +55,13 @@ Key features:
 - Optional SSH (22/tcp) – only opens if you provide a KeyName
 - Output: InstanceId, PublicIP, PublicDNS
 
-# Deploy without SSH:
+### Deploy without SSH:
 aws cloudformation deploy \
   --stack-name ec2-web-stack \
   --template-file cloudformation/ec2-stack.yml \
   --region $AWS_REGION --profile $AWS_PROFILE
 
-# Deploy with SSH (recommended /32):
+### Deploy with SSH (recommended /32):
 1. KeyPair creation in AWS (private key locally)
 aws ec2 create-key-pair \
   --key-name aws_def_key \
