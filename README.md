@@ -170,8 +170,8 @@ ALB=$(aws cloudformation describe-stacks \
 curl -i "http://$ALB/"
 ```
 
-### Own DockerHub image (public repo) - a node.js app listening on port 8080/tcp
-### Source code and github repo: https://github.com/digitalocean/sample-nodejs
+### Own DockerHub image (public repo) - a node.js app listening on port 8080/tcp: mcudivide/sample-nodejs-app:latest
+### Original source code and github repo: https://github.com/digitalocean/sample-nodejs
 ```sh
 aws cloudformation deploy \
   --stack-name ecs-stack \
