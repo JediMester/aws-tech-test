@@ -54,7 +54,7 @@ export AWS_PROFILE=default
 export AWS_REGION=eu-west-1
 ```
 
-### 1. EC2 stack (Nginx + optional SSH)
+## 1. EC2 stack (Nginx + optional SSH)
 
 Key features:
 - AL2 AMI from SSM's “latest” parameter (no hardcode)
@@ -108,7 +108,7 @@ curl "http://$EC2_IP/"
 # SSH (if there is KeyName):
 ssh -i ~/.ssh/aws_def_key.pem ec2-user@$EC2_IP
 ```
-### 2. Lambda + API Gateway stack
+## 2. Lambda + API Gateway stack
 
 ### What it does:
 
@@ -141,13 +141,14 @@ NOTE: the Lambda code uses the standard urllib.request lib, so there is no exter
 
 ## 3. ECS Fargate + ALB stack
 
-# What it does:
+### What it does:
 - VPC + 2 public subnets in separate AZs
 - Internet-facing ALB (80/tcp)
 - Fargate service with awsvpc network, AssignPublicIp=ENABLED
 - TargetGroup IP type, HealthCheck path parameterizable
 
-# Deploy (for testing, guaranteed success):
+### Deploy (for testing, guaranteed success):
+```sh
 aws cloudformation deploy \
   --stack-name ecs-stack \
   --template-file cloudformation/ecs-stack.yml \
@@ -157,17 +158,21 @@ aws cloudformation deploy \
       ContainerPort=80 \
       HealthCheckPath=/ \
   --region $AWS_REGION --profile $AWS_PROFILE
+```
 
-# ALB DNS + test:
+### ALB DNS + test:
+```sh
 ALB=$(aws cloudformation describe-stacks \
   --stack-name ecs-stack \
   --query "Stacks[0].Outputs[?OutputKey=='ALBDNSName'].OutputValue" \
   --output text --region $AWS_REGION --profile $AWS_PROFILE)
 
 curl -i "http://$ALB/"
+```
 
-# Own DockerHub image (public repo) - a node.js app listening on port 8080/tcp
-# Source code and github repo: https://github.com/digitalocean/sample-nodejs
+### Own DockerHub image (public repo) - a node.js app listening on port 8080/tcp
+### Source code and github repo: https://github.com/digitalocean/sample-nodejs
+```sh
 aws cloudformation deploy \
   --stack-name ecs-stack \
   --template-file cloudformation/ecs-stack.yml \
@@ -177,17 +182,20 @@ aws cloudformation deploy \
       ContainerPort=8080 \
       HealthCheckPath=/ \
   --region $AWS_REGION --profile $AWS_PROFILE
+```
 
+### Quick debugging
 
-## Quick debugging
-
-# CloudFormation events - why it might have failed:
+### CloudFormation events - why it might have failed:
+```sh
 aws cloudformation describe-stack-events \
   --stack-name <STACK_NAME> \
   --query "StackEvents[?contains(ResourceStatus,'FAILED')].[Timestamp,LogicalResourceId,ResourceStatus,ResourceStatusReason]" \
   --output table --region $AWS_REGION --profile $AWS_PROFILE
+```
 
-# Lambda logs (more robust):
+### Lambda logs (more robust):
+```sh
 FN=$(aws cloudformation describe-stack-resources \
   --stack-name lambda-stack \
   --logical-resource-id EC2StatusFunction \
@@ -196,15 +204,19 @@ FN=$(aws cloudformation describe-stack-resources \
 
 aws logs tail "/aws/lambda/$FN" --since 10m \
   --region $AWS_REGION --profile $AWS_PROFILE
+```
 
-# ECS service events:
+### ECS service events:
+```sh
 aws ecs describe-services \
   --cluster techtest-cluster \
   --services techtest-service \
   --query "services[0].events[0:10].message" \
   --region $AWS_REGION --profile $AWS_PROFILE
+```
 
-# TargetGroup health:
+### TargetGroup health:
+```sh
 TG_ARN=$(aws cloudformation describe-stack-resources \
   --stack-name ecs-stack \
   --query "StackResources[?LogicalResourceId=='TargetGroup'].PhysicalResourceId" \
@@ -213,8 +225,9 @@ TG_ARN=$(aws cloudformation describe-stack-resources \
 aws elbv2 describe-target-health \
   --target-group-arn "$TG_ARN" \
   --region $AWS_REGION --profile $AWS_PROFILE
+```
 
-# Common pitfalls might be:
+## Common pitfalls might be:
 - Region mismatch (EC2 in a different region than Lambda/ECS/ALB)
 - Port mismatch (app 8080 <-> TargetGroup/ALB 80)
 - HealthCheckPath returns 404
@@ -223,7 +236,8 @@ aws elbv2 describe-target-health \
 
 ## Cleanup (cost reduction)
 
-# Deleting stacks in the following order (because of dependencies):
+### Deleting stacks in the following order (because of dependencies):
+```sh
 aws cloudformation delete-stack --stack-name ecs-stack --region $AWS_REGION --profile $AWS_PROFILE
 aws cloudformation delete-stack --stack-name lambda-stack --region $AWS_REGION --profile $AWS_PROFILE
 aws cloudformation delete-stack --stack-name ec2-web-stack --region $AWS_REGION --profile $AWS_PROFILE
@@ -231,77 +245,22 @@ aws cloudformation delete-stack --stack-name ec2-web-stack --region $AWS_REGION 
 aws cloudformation wait stack-delete-complete --stack-name ecs-stack --region $AWS_REGION --profile $AWS_PROFILE
 aws cloudformation wait stack-delete-complete --stack-name lambda-stack --region $AWS_REGION --profile $AWS_PROFILE
 aws cloudformation wait stack-delete-complete --stack-name ec2-web-stack --region $AWS_REGION --profile $AWS_PROFILE
+```
 
+## Makefile - Costumizable and configuralble, a One-Shot nested deploy (S3 create + sync + deploy --> optional - included in the main/root dir.)
+```sh
+# create secured S3 bucket, sync templates, deploy nested stacks
+make deploy-all
 
-## Makefile - for quick profile/region switching (optional - included in the main/root dir.)
-
-# Example:
-
-AWS_PROFILE ?= default
-AWS_REGION  ?= eu-west-1
-
-deploy-ec2:
-	aws --profile $(AWS_PROFILE) --region $(AWS_REGION) cloudformation deploy \
-	  --stack-name ec2-web-stack --template-file cloudformation/ec2-stack.yml
-
-outputs-ec2:
-	aws --profile $(AWS_PROFILE) --region $(AWS_REGION) cloudformation describe-stacks \
-	  --stack-name ec2-web-stack --query "Stacks[0].Outputs"
-
-deploy-lambda:
-	aws --profile $(AWS_PROFILE) --region $(AWS_REGION) cloudformation deploy \
-	  --stack-name lambda-stack --template-file cloudformation/lambda-stack.yml \
-	  --capabilities CAPABILITY_NAMED_IAM
-
-outputs-lambda:
-	aws --profile $(AWS_PROFILE) --region $(AWS_REGION) cloudformation describe-stacks \
-	  --stack-name lambda-stack --query "Stacks[0].Outputs"
-
-deploy-ecs:
-	aws --profile $(AWS_PROFILE) --region $(AWS_REGION) cloudformation deploy \
-	  --stack-name ecs-stack --template-file cloudformation/ecs-stack.yml \
-	  --capabilities CAPABILITY_NAMED_IAM \
-	  --parameter-overrides ContainerImage=nginxdemos/hello:latest ContainerPort=80 HealthCheckPath=/
-
-outputs-ecs:
-	aws --profile $(AWS_PROFILE) --region $(AWS_REGION) cloudformation describe-stacks \
-	  --stack-name ecs-stack --query "Stacks[0].Outputs"
-
-
-## Main.yml - using nested stack (optional - included in the main/root dir.)
-
-In case you'd like to initiate it with a single command: 
-- create a new S3 or pick an existing one
-- upload the templates into the S3
-- reference the templates with TemplateURL
-
-# Example - main.yml:
-
-AWSTemplateFormatVersion: '2010-09-09'
-Description: Root stack pulling nested EC2, Lambda, ECS stacks
-
-Parameters:
-  TemplatesBucket:
-    Type: String
-  TemplatesPrefix:
-    Type: String
-    Default: cloudformation/
-
-Resources:
-  EC2Stack:
-    Type: AWS::CloudFormation::Stack
-    Properties:
-      TemplateURL: !Sub "https://${TemplatesBucket}.s3.${AWS::Region}.amazonaws.com/${TemplatesPrefix}ec2-stack.yml"
-
-  LambdaStack:
-    Type: AWS::CloudFormation::Stack
-    Properties:
-      TemplateURL: !Sub "https://${TemplatesBucket}.s3.${AWS::Region}.amazonaws.com/${TemplatesPrefix}lambda-stack.yml"
-
-  ECSStack:
-    Type: AWS::CloudFormation::Stack
-    Properties:
-      TemplateURL: !Sub "https://${TemplatesBucket}.s3.${AWS::Region}.amazonaws.com/${TemplatesPrefix}ecs-stack.yml"
+# show key outputs (EC2 Public IP/DNS, API URL, ALB DNS)
+make outputs-main
+```
+The Makefile will:
+- create S3 bucket techtest-cfn-templates-<account>-<region>,
+- block public access, enable SSE-S3,
+- sync cloudformation/ → s3://<bucket>/cloudformation/,
+- deploy cloudformation/main.yml with parameters,
+- print useful outputs.
 
 # Custom S3 creation:
 
