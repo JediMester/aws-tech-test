@@ -1,6 +1,6 @@
-## AWS Tech test - EC2 + ECS Fargate + ALB + Lambda/API Gateway (CloudFormation)
+# AWS Tech test - EC2 + ECS Fargate + ALB + Lambda/API Gateway (CloudFormation)
 
-### Overview
+## Overview
 
 This project deploys a small, modular AWS architecture using CloudFormation:
 - EC2 (Amazon Linux 2) – running NGINX (HTTP/80), optional SSH
@@ -92,7 +92,7 @@ aws cloudformation deploy \
   --parameter-overrides KeyName=aws_def_key SSHCidr=${MYIP}/32 \
   --region $AWS_REGION --profile $AWS_PROFILE
 ```
-# Outputs and quick check:
+### Outputs and quick check:
 ```sh
 aws cloudformation describe-stacks \
   --stack-name ec2-web-stack \
@@ -108,29 +108,34 @@ curl "http://$EC2_IP/"
 # SSH (if there is KeyName):
 ssh -i ~/.ssh/aws_def_key.pem ec2-user@$EC2_IP
 ```
-## 2. Lambda + API Gateway stack
+### 2. Lambda + API Gateway stack
 
-# What it does:
+### What it does:
 
 API: GET /status -> Lambda -> EC2 DescribeInstances (based on tag: Name=CF-EC2-Web) -> HTTP GET to EC2 IP -> JSON
 
-# Deployment:
+### Deployment:
+```sh
 aws cloudformation deploy \
   --stack-name lambda-stack \
   --template-file cloudformation/lambda-stack.yml \
   --capabilities CAPABILITY_NAMED_IAM \
   --region $AWS_REGION --profile $AWS_PROFILE
+```
 
-# API URL:
+### API URL:
+```sh
 aws cloudformation describe-stacks \
   --stack-name lambda-stack \
   --query "Stacks[0].Outputs[?OutputKey=='ApiUrl'].OutputValue" \
   --output text --region $AWS_REGION --profile $AWS_PROFILE
+```
 
 # Testing:
+```sh
 curl "https://<api-id>.execute-api.${AWS_REGION}.amazonaws.com/prod/status"
 # Expected output: {"ec2_ip":"<ip>","health":{"http_status":200,"ok":true}}
-
+```
 NOTE: the Lambda code uses the standard urllib.request lib, so there is no external dependency.
 
 
