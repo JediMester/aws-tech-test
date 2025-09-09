@@ -1,4 +1,4 @@
-# -------- Config --------
+# Config
 AWS_PROFILE ?= default
 AWS_REGION  ?= eu-west-1
 ACCOUNT     := $(shell aws sts get-caller-identity --query Account --output text --region $(AWS_REGION) --profile $(AWS_PROFILE))
@@ -13,7 +13,7 @@ DESIRED_COUNT   ?= 1
 TASK_CPU        ?= 256
 TASK_MEM        ?= 512
 
-# -------- S3: create + secure + sync --------
+# S3: create + secure + sync
 .PHONY: s3-create s3-secure s3-sync s3-all
 s3-create:
 ifeq ($(AWS_REGION),us-east-1)
@@ -41,7 +41,7 @@ s3-sync:
 
 s3-all: s3-create s3-secure s3-sync
 
-# -------- Nested deploy / update --------
+# Nested deploy / update
 .PHONY: deploy-main outputs-main
 deploy-main:
 	aws cloudformation deploy \
@@ -78,7 +78,7 @@ outputs-main:
 .PHONY: deploy-all
 deploy-all: s3-all deploy-main outputs-main
 
-# -------- Convenience: switch image quickly (no S3 resync needed) --------
+# Convenience: switch image quickly (no S3 resync needed)
 .PHONY: set-image-hello set-image-node
 set-image-hello:
 	$(MAKE) deploy-main CONTAINER_IMAGE=nginxdemos/hello:latest CONTAINER_PORT=80 HEALTH_PATH=/
@@ -87,23 +87,25 @@ set-image-hello:
 set-image-node:
 	$(MAKE) deploy-main CONTAINER_IMAGE=mcudivide/sample-nodejs-app:latest CONTAINER_PORT=8080 HEALTH_PATH=/
 
-# -------- Destroy + bucket cleanup --------
+# Destroy + bucket cleanup
 .PHONY: destroy-main s3-empty s3-delete nuke
 destroy-main:
 	-aws cloudformation delete-stack --stack-name main-stack --region "$(AWS_REGION)" --profile "$(AWS_PROFILE)"
 	-aws cloudformation wait stack-delete-complete --stack-name main-stack --region "$(AWS_REGION)" --profile "$(AWS_PROFILE)"
 
-# NOTE: if versioning is enabled, this WILL NOT delete the old versions!
 s3-empty:
 	-aws s3 rm s3://$(BUCKET)/ --recursive --region "$(AWS_REGION)" --profile "$(AWS_PROFILE)" || true
 
 s3-delete:
 	-aws s3api delete-bucket --bucket "$(BUCKET)" --region "$(AWS_REGION)" --profile "$(AWS_PROFILE)" || true
 
-nuke: destroy-main s3-empty s3-delete
+s3-delete-all:
+	-aws s3api list-object-versions --bucket "$BUCKET" --region "$AWS_REGION" --profile "$AWS_PROFILE" | jq -r '.Versions[]?, .DeleteMarkers[]? | [.Key, .VersionId] | @tsv' | while IFS=$'\t' read -r key ver; do aws s3api delete-object --bucket "$BUCKET" --key "$key" --version-id "$ver" --region "$AWS_REGION" --profile "$AWS_PROFILE"; done
+
+nuke: destroy-main s3-empty s3-delete s3-delete-all
 	@echo "All gone."
 
-# -------- Optional: ECR flow --------
+# Optional: ECR flow
 ECR_REPO ?= techtest-app
 
 .PHONY: ecr-create ecr-login ecr-build-push ecr-deploy
